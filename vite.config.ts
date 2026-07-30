@@ -8,6 +8,10 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3001',
       '/health': 'http://localhost:3001',
+      '/ready': 'http://localhost:3001',
+      '/metrics': 'http://localhost:3001',
+      '/openapi.json': 'http://localhost:3001',
+      '/api-docs': 'http://localhost:3001',
     },
   },
 })

@@ -1,94 +1,11 @@
-import {
-  FileText,
-  Globe,
-  Eye,
-  HardDrive,
-  TrendingUp,
-  TrendingDown,
-} from 'lucide-react';
+import { Database, Eye, FileText, GitFork, Globe, Heart } from 'lucide-react';
 import type { Stats } from '../types';
-
+export function formatBytes(value: number) { if (value < 1024) return `${value} B`; if (value < 1048576) return `${(value / 1024).toFixed(1)} KB`; return `${(value / 1048576).toFixed(1)} MB`; }
 export default function StatsCards({ stats }: { stats: Stats }) {
-const cards = [
-  {
-    label: 'Total Pastes',
-    value: stats.total.toLocaleString(),
-    trend: '+12%',
-    trendUp: true,
-    trendLabel: 'from last month',
-    icon: FileText,
-    color: 'from-violet-500 to-purple-500',
-    iconBg: 'bg-violet-500/10',
-    iconColor: 'text-violet-400',
-  },
-  {
-    label: 'Public Pastes',
-    value: stats.public.toLocaleString(),
-    trend: '+8%',
-    trendUp: true,
-    trendLabel: 'from last month',
-    icon: Globe,
-    color: 'from-blue-500 to-cyan-500',
-    iconBg: 'bg-blue-500/10',
-    iconColor: 'text-blue-400',
-  },
-  {
-    label: 'Total Views',
-    value: stats.views.toLocaleString(),
-    trend: '+18%',
-    trendUp: true,
-    trendLabel: 'from last month',
-    icon: Eye,
-    color: 'from-emerald-500 to-teal-500',
-    iconBg: 'bg-emerald-500/10',
-    iconColor: 'text-emerald-400',
-  },
-  {
-    label: 'Storage Used',
-    value: stats.bytes < 1024 ? `${stats.bytes} B` : `${(stats.bytes / 1024).toFixed(1)} KB`,
-    trend: '+6%',
-    trendUp: true,
-    trendLabel: 'from last month',
-    icon: HardDrive,
-    color: 'from-orange-500 to-amber-500',
-    iconBg: 'bg-orange-500/10',
-    iconColor: 'text-orange-400',
-  },
-];
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-      {cards.map((stat) => {
-        const Icon = stat.icon;
-        return (
-          <div
-            key={stat.label}
-            className="glass-card-hover p-5 group cursor-default"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
-                  {stat.label}
-                </p>
-                <p className="text-2xl font-bold text-white">{stat.value}</p>
-              </div>
-              <div className={`w-10 h-10 rounded-xl ${stat.iconBg} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
-                <Icon className={`w-5 h-5 ${stat.iconColor}`} />
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {stat.trendUp ? (
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-              ) : (
-                <TrendingDown className="w-3.5 h-3.5 text-red-400" />
-              )}
-              <span className={`text-xs font-semibold ${stat.trendUp ? 'text-emerald-400' : 'text-red-400'}`}>
-                {stat.trend}
-              </span>
-              <span className="text-xs text-gray-500">{stat.trendLabel}</span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+  const cards = [
+    ['Total pastes', stats.total, FileText, 'text-violet-400'], ['Public', stats.public, Globe, 'text-cyan-400'],
+    ['Favorites', stats.favorites, Heart, 'text-pink-400'], ['Views', stats.views, Eye, 'text-emerald-400'],
+    ['Forks', stats.forks, GitFork, 'text-blue-400'], ['Storage', formatBytes(stats.bytes), Database, 'text-amber-400'],
+  ] as const;
+  return <section aria-label="Paste statistics" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{cards.map(([label, value, Icon, color]) => <div key={label} className="glass-card p-4"><Icon className={`mb-3 h-4 w-4 ${color}`} /><p className="text-xl font-bold">{typeof value === 'number' ? value.toLocaleString() : value}</p><p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">{label}</p></div>)}</section>;
 }
