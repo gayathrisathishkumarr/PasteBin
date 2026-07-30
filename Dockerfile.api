@@ -1,0 +1,11 @@
+FROM node:20-bookworm-slim
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=optional
+COPY server ./server
+RUN mkdir -p /app/data
+ENV PORT=3001 DATABASE_PATH=/app/data/pastebin.db NODE_ENV=production
+EXPOSE 3001
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD node -e "fetch('http://localhost:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+CMD ["npm", "start"]
+
