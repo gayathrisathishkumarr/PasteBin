@@ -4,6 +4,18 @@
 
 PasteBin is a production-minded, full-stack snippet platform built for a Full Stack & DevOps evaluation. It combines a responsive React developer workspace with a documented Express REST API, versioned SQLite persistence, real analytics, secure one-time secrets, automated tests, containers, health checks, structured logs, and CI.
 
+## For evaluators
+
+**What it is:** A full-stack PasteBin platform where users can create, retrieve, manage, and share text or code snippets through a React web client and Express REST API.
+
+**Why it stands out:** Beyond the required CRUD workflow, PasteBin adds a local, explainable **Code Lineage Map** for forks, revisions, and structurally related snippets - without uploading source code to an AI service.
+
+**Run it quickly:** `npm install && npm run dev`, then open the URL shown in the terminal. For the containerized version, use `docker compose up --build` and open <http://localhost:8080>.
+
+**Try these first:** Create a public paste, edit it and inspect its revisions, fork it, then open the Dashboard to explore its lineage connection. Also try a Secret paste to see its one-time burn-after-reading behavior.
+
+**Evidence and guides:** [API documentation](http://localhost:3001/api-docs) · [OpenAPI contract](http://localhost:3001/openapi.json) · [Evaluator guide](docs/EVALUATOR_GUIDE.md) · [Demo script](docs/DEMO_SCRIPT.md) · [Deployment guide](docs/DEPLOYMENT.md)
+
 ## 60-second quick start
 
 Requirements: Node.js 20+ and npm.
