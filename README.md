@@ -1,8 +1,46 @@
 # PasteBin
 
+![CI](https://github.com/gayathrisathishkumarr/PasteBin/actions/workflows/ci.yml/badge.svg)
+
 PasteBin is a production-minded, full-stack snippet platform built for a Full Stack & DevOps evaluation. It combines a responsive React developer workspace with a documented Express REST API, versioned SQLite persistence, real analytics, secure one-time secrets, automated tests, containers, health checks, structured logs, and CI.
 
-> Screenshots: add final desktop dashboard, mobile library, paste studio, and paste-detail captures here before submission.
+## 60-second quick start
+
+Requirements: Node.js 20+ and npm.
+
+```bash
+git clone https://github.com/gayathrisathishkumarr/PasteBin.git
+cd PasteBin
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Open the Vite URL printed in the terminal, normally <http://localhost:5173>. The API and documentation are available through the same origin, so the app remains connected if Vite selects another port.
+
+## Challenge requirements
+
+| Requirement | PasteBin implementation |
+|---|---|
+| Persistent paste storage | SQLite database with WAL mode, foreign keys, indexes, schema versioning, and a persistent Docker volume |
+| Create, retrieve, list, search, edit, and delete | Validated REST endpoints plus complete responsive web workflows |
+| Favorite and fork/remix | Persisted favorite state, source attribution, and transactional fork counters |
+| Share and download | Stable direct URLs, clipboard feedback, client-side QR codes, raw-text endpoint, and safe source filenames |
+| Public and unlisted visibility | Public Explore scope; unlisted records are excluded from public queries and available only through direct URLs |
+| Expiration and burn after reading | Consistent expired responses, query exclusion, cleanup job, warning UI, and atomic one-time retrieval |
+| Version history | Immutable revision snapshots, readable comparisons, and restore-as-new-version behavior |
+| Filtering, sorting, and pagination | Parameterized search/filter queries, allowlisted sort modes, URL-persisted client filters, and paginated results |
+| Import and export | Validated JSON preview/import and single or bulk JSON/source export |
+| Analytics and activity | Aggregates and time-series values derived only from stored pastes, view events, and activity events |
+| Documented REST API | Machine-readable OpenAPI JSON, human-readable API docs, and an in-app safe GET playground |
+| Responsive web client | React, TypeScript, Vite, accessible dialogs/forms, mobile navigation, loading skeletons, and error recovery |
+| Security | Zod validation, parameterized SQL, CORS configuration, body limits, rate limiting, security headers, and safe error envelopes |
+| Logging and observability | Structured request logs, correlation IDs, durations, `/health`, `/ready`, and non-sensitive `/metrics` |
+| Docker and Compose | Separate API/web images, Nginx same-origin proxy, health checks, startup ordering, and named SQLite volume |
+| Automated testing | Vitest/Supertest coverage for core and advanced API behavior plus upload-type unit tests |
+| CI/CD | GitHub Actions runs locked install, tests, production build, Compose validation, and both Docker image builds |
+| Environment configuration | Documented `.env.example` for ports, database path, CORS, rate limiting, body size, and API origin |
+| Submission documentation | Architecture diagram, endpoint catalog, setup, security rationale, deployment guidance, tradeoffs, and evaluator guide |
 
 ## Product highlights
 
@@ -100,6 +138,41 @@ Errors consistently use:
   "error": { "code": "VALIDATION_ERROR", "message": "Paste validation failed", "details": {} },
   "requestId": "request-correlation-id"
 }
+```
+
+### curl examples
+
+Create a paste:
+
+```bash
+curl -X POST http://localhost:3001/api/pastes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Hello Java",
+    "description": "Minimal Java entry point",
+    "content": "public class Main { public static void main(String[] args) { System.out.println(\"Hello\"); } }",
+    "language": "Java",
+    "visibility": "public",
+    "tags": ["java", "example"]
+  }'
+```
+
+List or search pastes:
+
+```bash
+curl "http://localhost:3001/api/pastes?search=java&sort=newest&page=1&limit=10"
+```
+
+Retrieve a paste using the `id` returned by creation:
+
+```bash
+curl http://localhost:3001/api/pastes/PASTE_ID
+```
+
+Delete a paste:
+
+```bash
+curl -X DELETE http://localhost:3001/api/pastes/PASTE_ID
 ```
 
 ## Local development
