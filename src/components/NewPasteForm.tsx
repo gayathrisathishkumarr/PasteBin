@@ -1,6 +1,7 @@
 import { Braces, Check, Expand, FileUp, LoaderCircle, Minimize, Save, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Paste, PasteInput, Visibility } from '../types';
+import { acceptedTextFiles, isSupportedTextFile, languageForFile } from '../fileTypes';
 
 const templates: Record<string, { language: string; content: string }> = {
   JavaScript: { language: 'JavaScript', content: 'function main() {\n  console.log("Hello, PasteBin!");\n}\n\nmain();' },
@@ -15,8 +16,7 @@ const templates: Record<string, { language: string; content: string }> = {
   Dockerfile: { language: 'Dockerfile', content: 'FROM node:20-alpine\nWORKDIR /app\nCOPY . .\nRUN npm ci\nCMD ["npm", "start"]' },
   Environment: { language: 'Environment Variables', content: 'PORT=3001\nNODE_ENV=production' },
 };
-const ext: Record<string, string> = { js: 'JavaScript', jsx: 'React', ts: 'TypeScript', tsx: 'React', py: 'Python', sql: 'SQL', json: 'JSON', yaml: 'YAML', yml: 'YAML', md: 'Markdown', sh: 'Bash', dockerfile: 'Dockerfile', env: 'Environment Variables' };
-const languages = ['Plain Text', 'JavaScript', 'TypeScript', 'React', 'Python', 'SQL', 'JSON', 'YAML', 'Markdown', 'Bash', 'Dockerfile', 'Environment Variables'];
+const languages = ['Plain Text', 'JavaScript', 'TypeScript', 'React', 'Java', 'Python', 'SQL', 'JSON', 'YAML', 'Markdown', 'Bash', 'Dockerfile', 'Environment Variables'];
 const draftKey = 'pastebin:draft';
 const legacyDraftKey = 'pasteforge:draft';
 const empty: PasteInput = { title: '', description: '', content: '', language: 'Plain Text', visibility: 'public', tags: [], expiresAt: null };
@@ -55,11 +55,11 @@ export default function NewPasteForm({ saving, error, initial, autosave = true, 
   const set = <K extends keyof PasteInput>(key: K, value: PasteInput[K]) => setData((current) => ({ ...current, [key]: value }));
   async function loadFile(file?: File) {
     if (!file) return;
+    if (!isSupportedTextFile(file)) return setFileError('That file type is not supported. Choose a text or source-code file.');
     if (file.size > 100_000) return setFileError('Choose a text file smaller than 100 KB.');
     try {
       const content = await file.text();
-      const extension = file.name.toLowerCase().split('.').pop() || '';
-      setData((current) => ({ ...current, title: file.name.replace(/\.[^.]+$/, ''), content, language: ext[extension] || (file.name.toLowerCase() === 'dockerfile' ? 'Dockerfile' : 'Plain Text') }));
+      setData((current) => ({ ...current, title: file.name.replace(/\.[^.]+$/, ''), content, language: languageForFile(file) }));
       setFileError('');
     } catch { setFileError('This file could not be read as text.'); }
   }
@@ -84,7 +84,7 @@ export default function NewPasteForm({ saving, error, initial, autosave = true, 
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-white/[0.015] px-4 py-2">
           <div className="flex gap-1">{(['write', 'preview', 'raw'] as const).map((item) => <button type="button" key={item} onClick={() => setMode(item)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize ${mode === item ? 'bg-violet-500/20 text-violet-300' : 'text-gray-500 hover:text-white'}`}>{item}</button>)}</div>
           <button type="button" onClick={() => fileInput.current?.click()} className="focus-ring flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold text-violet-400"><FileUp className="h-4 w-4" />Upload</button>
-          <input ref={fileInput} className="sr-only" type="file" accept=".txt,.js,.jsx,.ts,.tsx,.py,.sql,.json,.yaml,.yml,.md,.sh,.env,text/*,application/json" onChange={(e) => void loadFile(e.target.files?.[0])} />
+          <input ref={fileInput} className="sr-only" type="file" accept={acceptedTextFiles} onChange={(e) => void loadFile(e.target.files?.[0])} />
         </div>
         {fileError && <p role="alert" className="px-5 pt-3 text-sm text-red-300">{fileError}</p>}
         <div onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-violet-500/5'); }} onDragLeave={(e) => e.currentTarget.classList.remove('bg-violet-500/5')} onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('bg-violet-500/5'); void loadFile(e.dataTransfer.files[0]); }} className="relative min-h-[430px]">
