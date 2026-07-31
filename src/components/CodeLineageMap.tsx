@@ -29,6 +29,7 @@ function positions(nodes: LineageNode[]) {
 }
 
 function connected(edge: LineageEdge, id: string) { return edge.source === id || edge.target === id; }
+function countLabel(count: number, singular: string, plural = `${singular}s`) { return `${count} ${count === 1 ? singular : plural}`; }
 
 export default function CodeLineageMap({ graph, loading, error, onOpen, onCompare, onRetry }: {
   graph: LineageGraph | null;
@@ -53,7 +54,7 @@ export default function CodeLineageMap({ graph, loading, error, onOpen, onCompar
         <h2 id="lineage-title" className="mt-1 text-xl font-bold">Code Lineage Map</h2>
         <p className="mt-1 max-w-2xl text-xs leading-5 text-gray-500">See where snippets came from, which code evolved together, and where duplication is quietly growing.</p>
       </div>
-      {graph && <div className="flex flex-wrap gap-2 text-[11px] text-gray-400"><span className="lineage-chip"><Network />{graph.meta.totalNodes} nodes</span><span className="lineage-chip"><GitFork />{graph.meta.totalEdges} links</span><span className="lineage-chip"><Braces />{graph.meta.languages} languages</span></div>}
+      {graph && <div className="flex flex-wrap gap-2 text-[11px] text-gray-400"><span className="lineage-chip"><Network />{countLabel(graph.meta.totalNodes, 'node')}</span><span className="lineage-chip"><GitFork />{countLabel(graph.meta.totalEdges, 'link')}</span><span className="lineage-chip"><Braces />{countLabel(graph.meta.languages, 'language')}</span></div>}
     </div>
 
     {loading ? <div role="status" className="grid min-h-[390px] place-items-center"><span className="animate-pulse text-sm text-violet-300">Tracing code relationships…</span></div> : error ? <div className="grid min-h-[300px] place-items-center p-6 text-center"><div><p className="text-sm text-red-300">{error}</p><button onClick={onRetry} className="btn-secondary mt-3">Retry map</button></div></div> : !graph || nodes.length < 2 ? <div className="grid min-h-[320px] place-items-center p-8 text-center"><div><ScanSearch className="mx-auto h-10 w-10 text-violet-400/50" /><p className="mt-3 font-medium">The map needs at least two snippets</p><p className="mt-1 text-sm text-gray-500">Create or fork another paste and its relationships will appear automatically.</p></div></div> :
@@ -84,7 +85,7 @@ export default function CodeLineageMap({ graph, loading, error, onOpen, onCompar
         </div>
 
         <aside className="min-h-[390px] p-5" aria-live="polite">
-          {active && <><div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex rounded-md border px-2 py-1 text-[10px] ${color(active.language).node}`}>{active.language}</span><h3 className="mt-3 truncate font-semibold">{active.title}</h3><p className="mt-1 text-xs text-gray-600">Version {active.version} · {active.revisionCount} saved revision{active.revisionCount === 1 ? '' : 's'}</p></div><button aria-label={`Open ${active.title}`} onClick={() => onOpen(active.id)} className="icon-button"><ArrowUpRight className="h-4 w-4" /></button></div>
+          {active && <><div className="flex items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex rounded-md border px-2 py-1 text-[10px] ${color(active.language).node}`}>{active.language}</span><h3 className="mt-3 truncate font-semibold">{active.title}</h3><p className="mt-1 text-xs text-gray-600">Version {active.version} · {countLabel(active.revisionCount, 'saved revision')}</p></div><button aria-label={`Open ${active.title}`} onClick={() => onOpen(active.id)} className="icon-button"><ArrowUpRight className="h-4 w-4" /></button></div>
             <div className="my-4 h-px bg-white/[0.06]" />
             <h4 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-600">Why it connects</h4>
             {relationships.length ? <ul className="mt-3 space-y-2">{relationships.slice(0, 5).map((edge) => { const otherId = edge.source === active.id ? edge.target : edge.source; const other = nodeById.get(otherId); if (!other) return null; return <li key={`${edge.type}-${otherId}`} className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3"><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium text-gray-300">{other.title}</p><p className="mt-1 text-[10px] text-gray-600">{edge.reasons[0]}</p></div><button aria-label={`Compare ${active.title} with ${other.title}`} title="Compare snippets" onClick={() => onCompare(active.id, other.id)} className="text-gray-600 hover:text-cyan-300"><GitCompareArrows className="h-4 w-4" /></button></div></li>; })}</ul> : <p className="mt-3 text-xs leading-5 text-gray-600">No strong relationship yet. Fork this snippet or create structurally similar code to reveal a connection.</p>}

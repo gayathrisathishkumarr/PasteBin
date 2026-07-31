@@ -7,5 +7,5 @@ export default function StatsCards({ stats }: { stats: Stats }) {
     ['Favorites', stats.favorites, Heart, 'text-pink-400'], ['Views', stats.views, Eye, 'text-emerald-400'],
     ['Forks', stats.forks, GitFork, 'text-blue-400'], ['Storage', formatBytes(stats.bytes), Database, 'text-amber-400'],
   ] as const;
-  return <section aria-label="Paste statistics" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{cards.map(([label, value, Icon, color]) => <div key={label} className="glass-card p-4"><Icon className={`mb-3 h-4 w-4 ${color}`} /><p className="text-xl font-bold">{typeof value === 'number' ? value.toLocaleString() : value}</p><p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">{label}</p></div>)}</section>;
+  return <section aria-label="Paste statistics" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{cards.map(([label, value, Icon, color]) => <div key={label} className="glass-card p-4"><Icon className={`mb-3 h-4 w-4 ${color}`} /><p className="text-xl font-bold">{typeof value === 'number' ? value.toLocaleString() : value}</p><p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p></div>)}</section>;
 }
