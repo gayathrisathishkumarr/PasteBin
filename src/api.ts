@@ -1,4 +1,4 @@
-import type { Activity, Analytics, Pagination, Paste, PasteInput } from './types';
+import type { Activity, Analytics, LineageGraph, Pagination, Paste, PasteInput, RelatedPastes } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -28,6 +28,8 @@ export const api = {
   list: (params: URLSearchParams, signal?: AbortSignal) => request<{ data: Paste[]; pagination: Pagination }>(`/api/pastes?${params}`, { signal }),
   analytics: () => request<Analytics>('/api/analytics'),
   activity: () => request<{ data: Activity[] }>('/api/activity'),
+  lineage: () => request<LineageGraph>('/api/lineage'),
+  related: (id: string) => request<RelatedPastes>(`/api/pastes/${encodeURIComponent(id)}/related`),
   health: () => Promise.all([request<{ status: string; uptimeSeconds: number }>('/health'), request<{ status: string; database: string }>('/ready')]),
   get: (id: string) => request<Paste>(`/api/pastes/${encodeURIComponent(id)}`),
   meta: (id: string) => request<Pick<Paste, 'id' | 'title' | 'visibility' | 'language' | 'expires_at'>>(`/api/pastes/${encodeURIComponent(id)}/meta`),

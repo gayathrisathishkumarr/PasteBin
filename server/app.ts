@@ -33,6 +33,8 @@ const openapi = {
     '/api/pastes/{id}/raw': { get: { summary: 'Raw text or source download' } },
     '/api/pastes/{id}/revisions': { get: { summary: 'List version history' } },
     '/api/pastes/{id}/revisions/{version}/restore': { post: { summary: 'Restore an older version' } },
+    '/api/lineage': { get: { summary: 'Map forks, revisions, and deterministic code similarity' } },
+    '/api/pastes/{id}/related': { get: { summary: 'Explain related snippets and similarity scores' } },
     '/api/activity': { get: { summary: 'Recent persisted activity' } },
     '/api/analytics': { get: { summary: 'Real aggregate analytics' } },
     '/api/export': { post: { summary: 'Export selected pastes as JSON' } },
@@ -41,7 +43,7 @@ const openapi = {
 };
 
 const extensionMap: Record<string, string> = {
-  JavaScript: 'js', TypeScript: 'ts', React: 'tsx', Python: 'py', SQL: 'sql',
+  JavaScript: 'js', TypeScript: 'ts', React: 'tsx', Java: 'java', Python: 'py', SQL: 'sql',
   JSON: 'json', YAML: 'yaml', Markdown: 'md', Bash: 'sh', Dockerfile: 'dockerfile', 'Environment Variables': 'env',
 };
 
@@ -56,6 +58,87 @@ function isExpired(row: PasteRow) {
 function safeFilename(title: string, language: string) {
   const base = title.normalize('NFKD').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'paste';
   return `${base}.${extensionMap[language] || 'txt'}`;
+}
+
+type LineagePaste = PasteRow & { revision_count: number };
+
+function codeTokens(content: string) {
+  return new Set(
+    content
+      .toLowerCase()
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(^|\s)\/\/.*$/gm, ' ')
+      .replace(/(^|\s)#.*$/gm, ' ')
+      .match(/[a-z_$][\w$]*|\d+(?:\.\d+)?|===|!==|=>|==|!=|<=|>=|&&|\|\||[{}()[\].,:;+*/%<>-]/g)
+      ?.slice(0, 2_000) || [],
+  );
+}
+
+function similarity(left: LineagePaste, right: LineagePaste) {
+  if (left.language !== right.language) return { score: 0, shared: 0 };
+  const a = codeTokens(left.content);
+  const b = codeTokens(right.content);
+  if (a.size < 4 || b.size < 4) return { score: 0, shared: 0 };
+  let shared = 0;
+  for (const token of a) if (b.has(token)) shared += 1;
+  const score = shared / (a.size + b.size - shared);
+  return { score, shared };
+}
+
+function overlap(left: string, right: string) {
+  const a = new Set(JSON.parse(left || '[]') as string[]);
+  const b = new Set(JSON.parse(right || '[]') as string[]);
+  return [...a].filter((tag) => b.has(tag));
+}
+
+function lineageNode(row: LineagePaste) {
+  return {
+    id: row.id,
+    title: row.title,
+    language: row.language,
+    visibility: row.visibility,
+    tags: JSON.parse(row.tags || '[]') as string[],
+    version: row.version,
+    revisionCount: row.revision_count,
+    forks: row.forks,
+    sourceId: row.source_id,
+    updatedAt: row.updated_at,
+    size: row.content.length,
+  };
+}
+
+function lineageData(rows: LineagePaste[]) {
+  const ids = new Set(rows.map((row) => row.id));
+  const edges: { source: string; target: string; type: 'fork' | 'similar'; score: number; reasons: string[] }[] = [];
+
+  for (const row of rows) {
+    if (row.source_id && ids.has(row.source_id)) {
+      edges.push({ source: row.source_id, target: row.id, type: 'fork', score: 1, reasons: ['Forked from the source snippet'] });
+    }
+  }
+
+  const candidates: typeof edges = [];
+  for (let left = 0; left < rows.length; left += 1) {
+    for (let right = left + 1; right < rows.length; right += 1) {
+      if (rows[right].source_id === rows[left].id || rows[left].source_id === rows[right].id) continue;
+      const match = similarity(rows[left], rows[right]);
+      const sharedTags = overlap(rows[left].tags, rows[right].tags);
+      if (match.score < 0.36 || match.shared < 4) continue;
+      const reasons = [`${Math.round(match.score * 100)}% structural token similarity`, `Same language: ${rows[left].language}`];
+      if (sharedTags.length) reasons.push(`Shared tags: ${sharedTags.slice(0, 3).join(', ')}`);
+      candidates.push({ source: rows[left].id, target: rows[right].id, type: 'similar', score: Number(match.score.toFixed(3)), reasons });
+    }
+  }
+
+  const degree = new Map<string, number>();
+  for (const edge of candidates.sort((a, b) => b.score - a.score)) {
+    if ((degree.get(edge.source) || 0) >= 3 || (degree.get(edge.target) || 0) >= 3) continue;
+    edges.push(edge);
+    degree.set(edge.source, (degree.get(edge.source) || 0) + 1);
+    degree.set(edge.target, (degree.get(edge.target) || 0) + 1);
+  }
+
+  return { nodes: rows.map(lineageNode), edges };
 }
 
 export function createApp(db: Database.Database, options: { rateLimit?: number } = {}) {
@@ -277,6 +360,56 @@ export function createApp(db: Database.Database, options: { rateLimit?: number }
     const mostViewed = db.prepare(`SELECT id,title,views value FROM pastes WHERE ${active} ORDER BY views DESC LIMIT 5`).all();
     const mostForked = db.prepare(`SELECT id,title,forks value FROM pastes WHERE ${active} ORDER BY forks DESC LIMIT 5`).all();
     res.json({ stats, languages, visibility, created, viewsOverTime, mostViewed, mostForked, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) });
+  });
+
+  app.get('/api/lineage', (req, res) => {
+    const limit = Math.min(40, Math.max(2, Number(req.query.limit) || 24));
+    const rows = db.prepare(`
+      SELECT p.*, (SELECT COUNT(*) FROM revisions r WHERE r.paste_id=p.id) revision_count
+      FROM pastes p
+      WHERE p.visibility!='secret' AND (p.expires_at IS NULL OR datetime(p.expires_at) > datetime('now'))
+      ORDER BY datetime(p.updated_at) DESC
+      LIMIT ?
+    `).all(limit) as LineagePaste[];
+    const graph = lineageData(rows);
+    res.json({
+      ...graph,
+      meta: {
+        totalNodes: graph.nodes.length,
+        totalEdges: graph.edges.length,
+        languages: new Set(graph.nodes.map((node) => node.language)).size,
+        similarityMethod: 'token-set-jaccard-v1',
+      },
+    });
+  });
+
+  app.get('/api/pastes/:id/related', (req, res) => {
+    const current = db.prepare(`
+      SELECT p.*, (SELECT COUNT(*) FROM revisions r WHERE r.paste_id=p.id) revision_count
+      FROM pastes p WHERE p.id=?
+    `).get(req.params.id) as LineagePaste | undefined;
+    if (!current || current.visibility === 'secret' || isExpired(current)) return fail(res, 404, 'NOT_FOUND', 'Paste not found.');
+    const rows = db.prepare(`
+      SELECT p.*, (SELECT COUNT(*) FROM revisions r WHERE r.paste_id=p.id) revision_count
+      FROM pastes p
+      WHERE p.id!=? AND p.visibility!='secret' AND (p.expires_at IS NULL OR datetime(p.expires_at) > datetime('now'))
+      ORDER BY datetime(p.updated_at) DESC LIMIT 80
+    `).all(current.id) as LineagePaste[];
+    const related = rows.map((row) => {
+      const isParent = current.source_id === row.id;
+      const isChild = row.source_id === current.id;
+      const match = similarity(current, row);
+      const sharedTags = overlap(current.tags, row.tags);
+      const reasons = [
+        ...(isParent ? ['Original source of this fork'] : []),
+        ...(isChild ? ['Forked from this snippet'] : []),
+        ...(match.score >= 0.2 ? [`${Math.round(match.score * 100)}% structural token similarity`] : []),
+        ...(sharedTags.length ? [`Shared tags: ${sharedTags.slice(0, 3).join(', ')}`] : []),
+      ];
+      return { node: lineageNode(row), score: isParent || isChild ? 1 : Number(match.score.toFixed(3)), reasons };
+    }).filter((item) => item.reasons.length && (item.score >= 0.2 || item.reasons.some((reason) => reason.includes('fork') || reason.includes('source'))))
+      .sort((a, b) => b.score - a.score).slice(0, 8);
+    res.json({ source: lineageNode(current), related });
   });
 
   app.post('/api/export', (req, res) => {

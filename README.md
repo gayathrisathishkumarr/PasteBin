@@ -45,6 +45,7 @@ Open the Vite URL printed in the terminal, normally <http://localhost:5173>. The
 ## Product highlights
 
 - Create, retrieve, search, filter, sort, paginate, edit, favorite, fork, share, download, export, import, and delete pastes
+- **Code Lineage Map** that connects forks, revisions, and structurally similar snippets with an explainable, deterministic comparison—no AI service or source-code upload
 - Public, direct-link unlisted, expiring, and atomically consumed burn-after-reading secret pastes
 - Stable refresh-safe URLs, raw-text downloads, client-side QR sharing, copy feedback, and distraction-free reading
 - Revision history on every edit, restoration as a new version, source attribution, and fork counts
@@ -124,6 +125,8 @@ Human-readable documentation: [`/api-docs`](http://localhost:3001/api-docs)
 | `GET` | `/api/pastes/:id/raw` | Plain-text view; `?download=1` adds a safe filename |
 | `GET` | `/api/pastes/:id/revisions` | List current and historical versions |
 | `POST` | `/api/pastes/:id/revisions/:version/restore` | Restore as a new version |
+| `GET` | `/api/lineage` | Map forks, versions, and code-similarity relationships |
+| `GET` | `/api/pastes/:id/related` | Explain related snippets and similarity scores |
 | `GET` | `/api/activity` | Recent real activity |
 | `GET` | `/api/analytics` | Real aggregate and time-series analytics |
 | `POST` | `/api/export` | Export selected IDs as JSON |

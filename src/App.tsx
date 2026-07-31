@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity as ActivityIcon, ArrowRight, CheckCircle2, ChevronRight, Clock3, Code2, Database, FileJson, FileUp, Heart, Keyboard, LayoutTemplate, LoaderCircle, Play, Search, Server, Sparkles, TerminalSquare, Trash2, X } from 'lucide-react';
+import { Activity as ActivityIcon, ArrowRight, CheckCircle2, ChevronRight, Clock3, Code2, Database, FileJson, FileUp, Heart, Keyboard, LayoutTemplate, LoaderCircle, Network, Play, Search, Server, Sparkles, TerminalSquare, Trash2, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ApiError, api } from './api';
 import NewPasteForm from './components/NewPasteForm';
+import CodeCompareDialog from './components/CodeCompareDialog';
+import CodeLineageMap from './components/CodeLineageMap';
 import PasteModal from './components/PasteModal';
 import RecentPastes from './components/RecentPastes';
 import Sidebar, { type View } from './components/Sidebar';
 import StatsCards, { formatBytes } from './components/StatsCards';
 import TopNav from './components/TopNav';
-import type { Activity, Analytics, Pagination, Paste, PasteInput, Stats } from './types';
+import type { Activity, Analytics, LineageGraph, Pagination, Paste, PasteInput, Stats } from './types';
 import { acceptedTextFiles, isSupportedTextFile, languageForFile } from './fileTypes';
 
 const emptyStats: Stats = { total: 0, public: 0, favorites: 0, views: 0, forks: 0, bytes: 0, active: 0, expired: 0 };
@@ -39,6 +41,10 @@ export default function App() {
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 12, total: 0, pages: 0 });
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [lineage, setLineage] = useState<LineageGraph | null>(null);
+  const [lineageLoading, setLineageLoading] = useState(true);
+  const [lineageError, setLineageError] = useState('');
+  const [comparison, setComparison] = useState<{ left: Paste; right: Paste } | null>(null);
   const [health, setHealth] = useState({ api: false, database: false, uptime: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -80,13 +86,16 @@ export default function App() {
     const controller = new AbortController();
     searchController.current = controller;
     setLoading(true); setError('');
+    if (view === 'dashboard') { setLineageLoading(true); setLineageError(''); }
     try {
-      const [list, analysis, events, status] = await Promise.all([api.list(query, controller.signal), api.analytics(), api.activity(), api.health()]);
+      const lineageRequest = view === 'dashboard' ? api.lineage().catch((lineageFailure) => { setLineageError(errorMessage(lineageFailure)); return null; }) : Promise.resolve(null);
+      const [list, analysis, events, status, graph] = await Promise.all([api.list(query, controller.signal), api.analytics(), api.activity(), api.health(), lineageRequest]);
       setPastes(list.data); setPagination(list.pagination); setAnalytics(analysis); setActivity(events.data);
       setHealth({ api: status[0].status === 'ok', database: status[1].status === 'ready', uptime: status[0].uptimeSeconds });
+      if (graph) setLineage(graph);
     } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) setError(errorMessage(e)); }
-    finally { setLoading(false); }
-  }, [query]);
+    finally { setLoading(false); if (view === 'dashboard') setLineageLoading(false); }
+  }, [query, view]);
 
   useEffect(() => { const timer = setTimeout(() => void load(), search ? 260 : 0); return () => clearTimeout(timer); }, [load, search]);
   useEffect(() => {
@@ -152,6 +161,7 @@ export default function App() {
   async function importJson(file?: File) { if (!file) return; try { const parsed = JSON.parse(await file.text()); const items = Array.isArray(parsed) ? parsed : parsed.pastes; if (!Array.isArray(items) || items.length < 1 || items.length > 50) throw new Error('Expected a PasteBin export containing 1–50 pastes.'); setImportPreview(items); } catch (e) { setNotice(errorMessage(e)); } }
   async function confirmImport() { if (!importPreview) return; try { const result = await api.import(importPreview); setImportPreview(null); setNotice(`${result.imported} pastes imported.`); navigate('pastes'); await load(); } catch (e) { setNotice(errorMessage(e)); } }
   async function uploadAsDraft(file?: File) { if (!file) return; if (!isSupportedTextFile(file)) return setNotice('That file type is not supported. Choose a text or source-code file.'); if (file.size > 100_000) return setNotice('Choose a text file under 100 KB.'); const content = await file.text(); localStorage.setItem(storageKeys.draft, JSON.stringify({ title: file.name.replace(/\.[^.]+$/, ''), description: '', content, language: languageForFile(file), visibility: prefs.visibility, tags: [], expiresAt: null })); navigate('new'); }
+  async function comparePastes(leftId: string, rightId: string) { try { setNotice('Preparing lineage comparison…'); const [left, right] = await Promise.all([api.get(leftId), api.get(rightId)]); setComparison({ left, right }); setNotice(''); } catch (e) { setNotice(errorMessage(e)); } }
 
   const actions = { onView: (id: string) => void openPaste(id), onFavorite: (p: Paste) => void favorite(p), onFork: (p: Paste) => void fork(p), onCopy: (p: Paste) => void copy(p.content), onShare: (p: Paste) => void copy(shareUrl(p.id), 'Link'), onDownload: (p: Paste) => { location.href = api.rawUrl(p.id, true); }, onDelete: askDelete };
   const list = <RecentPastes pastes={pastes} pagination={pagination} loading={loading} title={view === 'explore' ? 'Public snippets' : view === 'favorites' ? 'Favorite snippets' : view === 'dashboard' ? 'Recent work' : 'Your library'} layout={layout} selected={selectedIds} onLayout={(value) => { setLayout(value); localStorage.setItem(storageKeys.layout, value); }} onSelect={(id) => setSelectedIds((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; })} {...actions} onPage={setPage} onCreate={() => navigate('new')} />;
@@ -163,8 +173,9 @@ export default function App() {
     <div className="min-h-screen lg:ml-[250px]"><TopNav search={search} onSearch={(value) => { setSearch(value); setPage(1); }} onCreate={() => navigate('new')} onPalette={() => setPalette(true)} showSearch={['pastes','explore','favorites'].includes(view)} />
       <main id="main-content" className={`p-4 sm:p-6 ${prefs.density === 'compact' ? 'density-compact' : ''}`}>
         {view === 'dashboard' && <div className="mx-auto max-w-7xl space-y-6">
-          <section className="hero-panel relative overflow-hidden rounded-2xl border border-violet-500/15 p-6 sm:p-9"><div className="absolute right-8 top-8 hidden h-28 w-28 rotate-6 items-center justify-center rounded-3xl border border-violet-400/10 bg-violet-500/5 lg:flex"><Code2 className="h-12 w-12 text-violet-400/30" /></div><div className="relative"><p className="flex items-center gap-2 text-sm font-semibold text-violet-400"><Sparkles className="h-4 w-4" />Your developer knowledge base</p><h1 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">Forge snippets.<br/><span className="text-gradient">Share understanding.</span></h1><p className="mt-4 max-w-xl text-sm leading-6 text-gray-400">A focused workspace for code that deserves to be found, remixed, versioned, and remembered.</p><div className="mt-6 flex flex-wrap gap-3"><button onClick={() => navigate('new')} className="btn-primary">Create a paste</button><button onClick={() => navigate('explore')} className="btn-secondary flex items-center gap-2">Explore public work <ArrowRight className="h-4 w-4" /></button></div></div></section>
+          <section className="hero-panel relative overflow-hidden rounded-2xl border border-violet-500/15 p-6 sm:p-9"><div aria-hidden="true" className="absolute -right-20 -top-20 h-72 w-72 rounded-full border border-violet-400/10 shadow-[0_0_100px_rgba(124,58,237,.14)]" /><div className="relative grid items-center gap-8 lg:grid-cols-[1fr_380px]"><div><p className="flex items-center gap-2 text-sm font-semibold text-violet-400"><Sparkles className="h-4 w-4" />Your developer knowledge base</p><h1 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">Forge snippets.<br/><span className="text-gradient">Trace understanding.</span></h1><p className="mt-4 max-w-xl text-sm leading-6 text-gray-400">A focused workspace where code can be found, remixed, versioned—and traced back to the ideas that shaped it.</p><div className="mt-6 flex flex-wrap gap-3"><button onClick={() => navigate('new')} className="btn-primary">Create a paste</button><button onClick={() => document.getElementById('lineage-title')?.scrollIntoView({ behavior: prefs.reducedMotion ? 'auto' : 'smooth' })} className="btn-secondary flex items-center gap-2">Explore code lineage <ArrowRight className="h-4 w-4" /></button></div></div><div className="relative hidden min-h-48 lg:block"><div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full border border-violet-400/20"><div className="absolute inset-5 rounded-full border border-dashed border-cyan-400/20"><div className="absolute inset-7 flex items-center justify-center rounded-full border border-white/[0.08] bg-violet-500/10"><Code2 className="h-8 w-8 text-violet-300" /></div></div></div>{['TS','PY','JAVA','SQL'].map((label, index) => { const points = ['left-3 top-7','right-8 top-3','bottom-3 left-16','bottom-8 right-3']; return <span key={label} className={`absolute ${points[index]} rounded-lg border border-white/10 bg-dark-900/80 px-2.5 py-1.5 font-mono text-[10px] text-gray-300 shadow-xl`}>{label}</span>; })}<span className="absolute bottom-0 left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap text-[10px] text-gray-600"><Network className="h-3 w-3 text-cyan-400" />{lineage?.meta.totalNodes || 0} snippets · {lineage?.meta.totalEdges || 0} discovered links</span></div></div></section>
           <StatsCards stats={analytics?.stats || emptyStats} />
+          <CodeLineageMap graph={lineage} loading={lineageLoading} error={lineageError} onOpen={(id) => void openPaste(id)} onCompare={(left, right) => void comparePastes(left, right)} onRetry={() => void load()} />
           {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => void load()} className="underline">Retry</button></div>}
           <div className="grid gap-5 xl:grid-cols-[1fr_340px]"><div>{list}</div><aside className="space-y-5">
             <section className="glass-card p-5"><h2 className="mb-4 text-sm font-semibold">Quick launch</h2><div className="grid grid-cols-2 gap-2">{([
@@ -185,6 +196,7 @@ export default function App() {
       </main>
     </div>
     {pasteId && !secretMeta && <PasteModal paste={selected} loading={pasteLoading} error={pasteError} onClose={closePaste} onRetry={() => void openPaste(pasteId, false, true)} onEdit={(paste) => { setEditing(paste); closePaste(); navigate('new'); }} onFavorite={(paste) => void favorite(paste)} onFork={(paste) => void fork(paste)} onDelete={askDelete} notify={setNotice} />}
+    {comparison && <CodeCompareDialog left={comparison.left} right={comparison.right} onClose={() => setComparison(null)} />}
     {secretMeta && <div className="modal-backdrop"><section role="alertdialog" aria-modal="true" className="glass-card max-w-md p-6"><div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-300"><Trash2 /></div><h2 className="text-xl font-bold">Burn-after-reading secret</h2><p className="mt-2 text-sm leading-6 text-gray-400">“{secretMeta.title}” will be permanently deleted as soon as it opens. It can only be retrieved once.</p><div className="mt-5 flex justify-end gap-2"><button autoFocus onClick={closePaste} className="btn-secondary">Cancel</button><button onClick={() => { const id = secretMeta.id; setSecretMeta(null); void openPaste(id, false, true); }} className="btn-primary !from-amber-600 !to-orange-600">Open and burn</button></div></section></div>}
     {deleteConfirm && <div className="modal-backdrop"><section role="alertdialog" aria-modal="true" className="glass-card max-w-md p-6"><h2 className="text-xl font-bold">{deleteConfirm.title}</h2><p className="mt-2 text-sm leading-6 text-gray-400">{deleteConfirm.message}</p><div className="mt-5 flex justify-end gap-2"><button autoFocus onClick={() => setDeleteConfirm(null)} className="btn-secondary">Cancel</button><button onClick={() => { const action = deleteConfirm.action; setDeleteConfirm(null); void action().catch((e) => setNotice(errorMessage(e))); }} className="btn-primary !from-red-600 !to-rose-600">Delete</button></div></section></div>}
     {importPreview && <div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="import-title" className="glass-card w-full max-w-lg p-6"><h2 id="import-title" className="text-xl font-bold">Preview JSON import</h2><p className="mt-2 text-sm text-gray-400">The API will validate all {importPreview.length} pastes before saving.</p><ul className="mt-4 max-h-56 space-y-2 overflow-y-auto">{importPreview.map((item, index) => <li key={`${item.title}-${index}`} className="rounded-lg border border-white/[0.05] p-3"><p className="truncate text-sm font-medium">{item.title || 'Untitled (invalid)'}</p><p className="mt-1 text-xs text-gray-600">{item.language || 'Unknown'} · {item.content?.length || 0} characters</p></li>)}</ul><div className="mt-5 flex justify-end gap-2"><button autoFocus onClick={() => setImportPreview(null)} className="btn-secondary">Cancel</button><button onClick={() => void confirmImport()} className="btn-primary">Validate and import</button></div></section></div>}

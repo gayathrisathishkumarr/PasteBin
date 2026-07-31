@@ -54,6 +54,27 @@ describe('PasteBin API', () => {
     expect((await request(app).get(`/api/pastes/${source.id}`).expect(200)).body.forks).toBe(1);
   });
 
+  it('maps code lineage, explains similarity, and excludes secrets', async () => {
+    const app = createApp(db);
+    const content = 'function total(items) { return items.reduce((sum, item) => sum + item.price, 0); }';
+    const source = (await request(app).post('/api/pastes').send(sample({ title: 'Cart total', content, tags: ['commerce'] })).expect(201)).body;
+    const similar = (await request(app).post('/api/pastes').send(sample({ title: 'Invoice total', content: 'function total(lines) { return lines.reduce((sum, item) => sum + item.price, 0); }', tags: ['commerce'] })).expect(201)).body;
+    const fork = (await request(app).post(`/api/pastes/${source.id}/fork`).expect(201)).body;
+    await request(app).post('/api/pastes').send(sample({ title: 'Hidden secret', content, visibility: 'secret' })).expect(201);
+
+    const lineage = await request(app).get('/api/lineage').expect(200);
+    expect(lineage.body.nodes.map((node: { title: string }) => node.title).sort()).toEqual(['Cart total', 'Invoice total', 'Remix of Cart total'].sort());
+    expect(lineage.body.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: source.id, target: fork.id, type: 'fork' }),
+      expect.objectContaining({ source: source.id, target: similar.id, type: 'similar' }),
+    ]));
+    expect(lineage.body.meta).toMatchObject({ totalNodes: 3, languages: 1, similarityMethod: 'token-set-jaccard-v1' });
+
+    const related = await request(app).get(`/api/pastes/${source.id}/related`).expect(200);
+    expect(related.body.related.map((item: { node: { id: string } }) => item.node.id)).toEqual(expect.arrayContaining([similar.id, fork.id]));
+    expect(related.body.related[0]).toHaveProperty('reasons');
+  });
+
   it('never exposes unlisted, secret, or expired pastes in public lists', async () => {
     const app = createApp(db);
     await request(app).post('/api/pastes').send(sample({ title: 'Public' })).expect(201);

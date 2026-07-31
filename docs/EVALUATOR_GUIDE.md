@@ -15,7 +15,7 @@ The application deliberately avoids authentication, accounts, payments, and simu
 | Code Quality | Strict TypeScript; shared API and domain types; reusable upload-type logic; error boundary; accessible component contracts; focused Vitest and Supertest coverage; no fake or unfinished product surfaces |
 | DevOps | Multi-stage web image; independent API image; Compose health checks and startup ordering; named SQLite volume; environment configuration; GitHub Actions tests, build, Compose validation, and image builds |
 | Documentation | Quick start; requirements matrix; architecture; database design; complete route table; curl examples; security rationale; deployment guidance; tradeoffs; evaluator walkthrough |
-| Creativity | Paste Studio with draft recovery and templates; atomic burn-after-reading; revision comparison and restoration; fork/remix lineage; client-side QR sharing; command palette; real activity and analytics; safe API Playground |
+| Creativity | Code Lineage Map with explainable similarity and side-by-side comparison; Paste Studio with draft recovery and templates; atomic burn-after-reading; revision restoration; fork/remix lineage; client-side QR sharing; command palette; real activity and analytics; safe API Playground |
 
 ## Polished three-minute demonstration
 
@@ -32,6 +32,8 @@ The application deliberately avoids authentication, accounts, payments, and simu
 3. Add a description and tags, keep visibility Public, and create the paste.
 4. Refresh the direct paste URL to demonstrate stable routing and persistence.
 5. Copy content, download the `.java` source, and show that the QR code is generated locally.
+
+Before continuing, return to the Dashboard, select a node in **Code Lineage Map**, explain solid fork links versus dotted structural-similarity links, and compare two connected snippets. Emphasize that the calculation is deterministic and never sends source code to an AI service.
 
 ### 1:20–2:10 — Management and collaboration
 
@@ -105,4 +107,5 @@ With Docker Compose, open the application at <http://localhost:8080>; the same o
 - **Why same-origin proxying?** It keeps local fallback ports and the container deployment consistent, avoids hard-coded browser API origins, and reduces CORS failure modes.
 - **How are revisions modeled?** The current row remains fast to query; every edit snapshots the previous state in an immutable revisions table. Restoration creates another version rather than rewriting history.
 - **Why event tables?** Activity and view events make dashboard and time-series analytics genuine and auditable without fabricated trends.
+- **How does Code Lineage work?** The API normalizes each active non-secret snippet into a bounded token set, calculates same-language Jaccard similarity, caps links per node, and combines those explainable edges with persisted fork/revision metadata. The comparison remains local and deterministic.
 - **What is intentionally lightweight?** Syntax presentation is dependency-light and line-numbered. A production evolution could add worker-based Shiki highlighting and Playwright/axe visual accessibility checks.
