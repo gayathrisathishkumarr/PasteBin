@@ -266,3 +266,9 @@ Build and publish the two Docker images, attach persistent storage at `/app/data
 8. Inspect real Dashboard activity, language bars, health indicators, and Analytics.
 9. Use `Ctrl/Cmd + K`, change local Settings, and test a safe GET in API Playground.
 10. Run `npm test`, `npm run build`, and `docker compose config`.
+
+## Submission extras
+
+- [Evaluator guide](docs/EVALUATOR_GUIDE.md) - architecture rationale and a three-minute walkthrough
+- [Demo script](docs/DEMO_SCRIPT.md) - ready-to-record optional video narration and checklist
+- [Deployment guide](docs/DEPLOYMENT.md) - production Docker deployment and free-hosting tradeoffs
