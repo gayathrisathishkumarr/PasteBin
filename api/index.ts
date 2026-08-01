@@ -1,8 +1,9 @@
 import { createApp } from '../server/app.js';
 import { createDatabase } from '../server/db.js';
+import { createKvApp, hasKvEnvironment } from '../server/kvApp.js';
 
-// Vercel Functions can write only to /tmp. The regular Docker and local
-// deployments continue to use DATABASE_PATH (or ./data/pastebin.db).
-const db = createDatabase(process.env.DATABASE_PATH || '/tmp/pastebin.db');
-
-export default createApp(db);
+// Vercel uses Upstash Redis for durable serverless storage. Docker and local
+// development keep the original SQLite implementation and API contract.
+export default hasKvEnvironment()
+  ? createKvApp()
+  : createApp(createDatabase(process.env.DATABASE_PATH || '/tmp/pastebin.db'));
