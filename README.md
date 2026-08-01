@@ -2,7 +2,9 @@
 
 ![CI](https://github.com/gayathrisathishkumarr/PasteBin/actions/workflows/ci.yml/badge.svg)
 
-PasteBin is a production-minded, full-stack snippet platform built for a Full Stack & DevOps evaluation. It combines a responsive React developer workspace with a documented Express REST API, versioned SQLite persistence, real analytics, secure one-time secrets, automated tests, containers, health checks, structured logs, and CI.
+PasteBin is a production-minded, full-stack snippet platform built for a Full Stack & DevOps evaluation. It combines a responsive React developer workspace with a documented Express REST API, durable SQLite/Upstash persistence, real analytics, secure one-time secrets, automated tests, containers, health checks, structured logs, and CI.
+
+**Live deployment:** [Open PasteBin](https://paste-bin-smoky.vercel.app/) · [Live API documentation](https://paste-bin-smoky.vercel.app/api-docs) · [Live OpenAPI contract](https://paste-bin-smoky.vercel.app/openapi.json)
 
 ## For evaluators
 
@@ -14,7 +16,7 @@ PasteBin is a production-minded, full-stack snippet platform built for a Full St
 
 **Try these first:** Create a public paste, edit it and inspect its revisions, fork it, then open the Dashboard to explore its lineage connection. Also try a Secret paste to see its one-time burn-after-reading behavior.
 
-**Evidence and guides:** [API documentation](http://localhost:3001/api-docs) · [OpenAPI contract](http://localhost:3001/openapi.json) · [Evaluator guide](docs/EVALUATOR_GUIDE.md) · [Demo script](docs/DEMO_SCRIPT.md) · [Deployment guide](docs/DEPLOYMENT.md)
+**Evidence and guides:** [Live application](https://paste-bin-smoky.vercel.app/) · [API documentation](https://paste-bin-smoky.vercel.app/api-docs) · [OpenAPI contract](https://paste-bin-smoky.vercel.app/openapi.json) · [Evaluator guide](docs/EVALUATOR_GUIDE.md) · [Demo script](docs/DEMO_SCRIPT.md) · [Deployment guide](docs/DEPLOYMENT.md)
 
 ## 60-second quick start
 
@@ -34,7 +36,7 @@ Open the Vite URL printed in the terminal, normally <http://localhost:5173>. The
 
 | Requirement | PasteBin implementation |
 |---|---|
-| Persistent paste storage | SQLite database with WAL mode, foreign keys, indexes, schema versioning, and a persistent Docker volume |
+| Persistent paste storage | SQLite with a persistent Docker volume locally; Upstash Redis provides durable serverless storage on Vercel |
 | Create, retrieve, list, search, edit, and delete | Validated REST endpoints plus complete responsive web workflows |
 | Favorite and fork/remix | Persisted favorite state, source attribution, and transactional fork counters |
 | Share and download | Stable direct URLs, clipboard feedback, client-side QR codes, raw-text endpoint, and safe source filenames |
@@ -69,20 +71,22 @@ Open the Vite URL printed in the terminal, normally <http://localhost:5173>. The
 
 ```mermaid
 flowchart LR
-    B[Browser] -->|same-origin HTTP| N[Nginx / Vite proxy]
+    B[Browser] -->|same-origin HTTP| N[Nginx, Vite, or Vercel routing]
     N --> R[React + TypeScript client]
     N -->|/api, /health, /ready| E[Express API]
     E --> Z[Zod validation]
-    E --> S[(SQLite WAL database)]
+    E -->|Docker and local| S[(SQLite WAL database)]
+    E -->|Vercel serverless| U[(Upstash Redis)]
     S --> P[pastes]
     S --> V[revisions]
     S --> A[activity_events]
     S --> W[view_events]
+    U --> K[pastes, revisions, activity, analytics]
     CI[GitHub Actions] --> T[Tests + build + Docker builds]
     D[Docker volume] --- S
 ```
 
-The browser uses same-origin URLs in development and production. Vite proxies API traffic to port `3001`; production Nginx routes the same paths to the API container. This avoids hard-coded browser ports and CORS surprises.
+The browser uses same-origin URLs in every environment. Vite proxies API traffic to port `3001`; Nginx routes the same paths to the Docker API; and Vercel rewrites them to the serverless Express entry point. Docker/local runs use SQLite, while the public Vercel deployment uses Upstash Redis so data survives across stateless function instances.
 
 ## Technology choices
 
@@ -90,10 +94,13 @@ The browser uses same-origin URLs in development and production. Vite proxies AP
 - **Tailwind CSS + Lucide** for an accessible, responsive design system; **qrcode** generates QR images entirely in the browser
 - **Express 5 + Zod** for a compact HTTP boundary with centralized validation and predictable errors
 - **better-sqlite3** for transactional, parameterized, low-operations persistence with WAL, foreign keys, indexes, and atomic secret retrieval
+- **Upstash Redis REST** for durable Vercel storage, atomic multi-command writes, distributed per-paste locks, revisions, activity, and analytics without exposing credentials to the browser
 - **Vitest + Supertest** for isolated API integration tests
 - **Nginx + Docker Compose** for a production-like same-origin deployment and persistent database volume
 
 ## Database and migrations
+
+PasteBin keeps one API contract with two persistence adapters: SQLite for local/Docker operation and Upstash Redis for the public serverless deployment. Both support the complete CRUD, revision, favorite, fork, secret, activity, analytics, and lineage workflows.
 
 Schema version `2` is managed through SQLite `PRAGMA user_version`. Migration runs in a transaction:
 
@@ -263,7 +270,7 @@ Build and publish the two Docker images, attach persistent storage at `/app/data
 - Syntax presentation is dependency-light and line-numbered; a future iteration could add a worker-based parser such as Shiki for richer highlighting.
 - Favorites and “My Pastes” are workspace-wide because authentication is deliberately absent.
 - Trending is a transparent score from persisted views, forks, favorites, and recency ordering—not a fabricated percentage.
-- SQLite is ideal for this single-node challenge; PostgreSQL is the natural scale-out path.
+- SQLite keeps local and Docker setup simple, while Upstash solves serverless persistence on Vercel; PostgreSQL would be the natural next step for relational multi-user scale.
 - A larger production team would add Playwright visual regression and axe accessibility checks to the existing integration suite.
 
 ## Evaluator demo checklist
