@@ -36,6 +36,9 @@ function errorMessage(error: unknown) {
 function countLabel(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
+function formatServerDateTime(value: string) {
+  return new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`).toLocaleString();
+}
 
 export default function App() {
   const [view, setView] = useState<View>(route);
@@ -48,7 +51,7 @@ export default function App() {
   const [lineageLoading, setLineageLoading] = useState(true);
   const [lineageError, setLineageError] = useState('');
   const [comparison, setComparison] = useState<{ left: Paste; right: Paste } | null>(null);
-  const [health, setHealth] = useState({ api: false, database: false, uptime: 0 });
+  const [health, setHealth] = useState({ api: false, database: false, databaseName: 'Persistent database', uptime: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -94,7 +97,7 @@ export default function App() {
       const lineageRequest = view === 'dashboard' ? api.lineage().catch((lineageFailure) => { setLineageError(errorMessage(lineageFailure)); return null; }) : Promise.resolve(null);
       const [list, analysis, events, status, graph] = await Promise.all([api.list(query, controller.signal), api.analytics(), api.activity(), api.health(), lineageRequest]);
       setPastes(list.data); setPagination(list.pagination); setAnalytics(analysis); setActivity(events.data);
-      setHealth({ api: status[0].status === 'ok', database: status[1].status === 'ready', uptime: status[0].uptimeSeconds });
+      setHealth({ api: status[0].status === 'ok', database: status[1].status === 'ready', databaseName: status[1].database === 'upstash-redis' ? 'Upstash database' : 'SQLite database', uptime: status[0].uptimeSeconds });
       if (graph) setLineage(graph);
     } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) setError(errorMessage(e)); }
     finally { setLoading(false); if (view === 'dashboard') setLineageLoading(false); }
@@ -185,9 +188,9 @@ export default function App() {
             <section className="glass-card p-5"><h2 className="mb-4 text-sm font-semibold">Quick launch</h2><div className="grid grid-cols-2 gap-2">{([
               ['New Paste', FileUp, () => navigate('new')], ['Upload File', FileUp, () => uploadInput.current?.click()], ['Choose Template', LayoutTemplate, () => navigate('new')], ['Import JSON', FileJson, () => importInput.current?.click()], ['API Playground', TerminalSquare, () => navigate('api')],
             ] as [string, LucideIcon, () => void][]).map(([label, Icon, action]) => <button key={label} onClick={action} className="focus-ring rounded-xl border border-white/[0.05] bg-white/[0.025] p-3 text-left hover:border-violet-500/20"><Icon className="mb-2 h-4 w-4 text-violet-400" /><span className="text-xs font-medium">{label}</span></button>)}</div><input ref={uploadInput} type="file" className="sr-only" accept={acceptedTextFiles} onChange={(e) => void uploadAsDraft(e.target.files?.[0])} /><input ref={importInput} type="file" className="sr-only" accept=".json,application/json" onChange={(e) => void importJson(e.target.files?.[0])} /></section>
-            <section className="glass-card p-5"><h2 className="mb-4 text-sm font-semibold">System pulse</h2><div className="space-y-3"><div className="status-row"><Server />API service<span className={health.api ? 'status-ok' : 'status-bad'}>{health.api ? 'Healthy' : 'Unavailable'}</span></div><div className="status-row"><Database />SQLite database<span className={health.database ? 'status-ok' : 'status-bad'}>{health.database ? 'Ready' : 'Unavailable'}</span></div><div className="status-row"><Clock3 />API uptime<span className="ml-auto text-xs text-gray-400">{Math.floor(health.uptime / 60)}m</span></div></div></section>
+            <section className="glass-card p-5"><h2 className="mb-4 text-sm font-semibold">System pulse</h2><div className="space-y-3"><div className="status-row"><Server />API service<span className={health.api ? 'status-ok' : 'status-bad'}>{health.api ? 'Healthy' : 'Unavailable'}</span></div><div className="status-row"><Database />{health.databaseName}<span className={health.database ? 'status-ok' : 'status-bad'}>{health.database ? 'Ready' : 'Unavailable'}</span></div><div className="status-row"><Clock3 />API uptime<span className="ml-auto text-xs text-gray-400">{Math.floor(health.uptime / 60)}m</span></div></div></section>
             <section className="glass-card p-5"><h2 className="mb-4 text-sm font-semibold">Trending languages</h2>{analytics?.languages.length ? bars(analytics.languages.slice(0,5), 'bg-gradient-to-r from-violet-500 to-cyan-400') : <p className="text-xs text-gray-500">Create pastes to see language trends.</p>}</section>
-            <section className="glass-card p-5"><h2 className="mb-4 text-sm font-semibold">Recent activity</h2>{activity.length ? <ol className="space-y-3">{activity.slice(0,6).map((event) => <li key={event.id} className="flex gap-3 text-xs"><ActivityIcon className="mt-0.5 h-3.5 w-3.5 text-violet-400" /><span className="min-w-0"><span className="capitalize text-gray-300">{event.type}</span> <span className="truncate text-gray-500">{event.detail}</span><time className="mt-0.5 block text-[10px] text-gray-700">{new Date(`${event.created_at.replace(' ', 'T')}Z`).toLocaleString()}</time></span></li>)}</ol> : <p className="text-xs text-gray-500">Real activity appears here as you work.</p>}</section>
+            <section className="glass-card p-5"><h2 className="mb-4 text-sm font-semibold">Recent activity</h2>{activity.length ? <ol className="space-y-3">{activity.slice(0,6).map((event) => <li key={event.id} className="flex gap-3 text-xs"><ActivityIcon className="mt-0.5 h-3.5 w-3.5 text-violet-400" /><span className="min-w-0"><span className="capitalize text-gray-300">{event.type}</span> <span className="truncate text-gray-500">{event.detail}</span><time className="mt-0.5 block text-[10px] text-gray-700">{formatServerDateTime(event.created_at)}</time></span></li>)}</ol> : <p className="text-xs text-gray-500">Real activity appears here as you work.</p>}</section>
           </aside></div>
         </div>}
         {view === 'new' && <NewPasteForm saving={saving} error={error} initial={editing} autosave={prefs.autosave} tabSize={prefs.tabSize} defaults={{ language: prefs.language, visibility: prefs.visibility }} onSubmit={savePaste} onCancel={editing ? () => { setEditing(null); navigate('pastes'); } : undefined} />}
